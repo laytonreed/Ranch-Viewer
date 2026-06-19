@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Ranch 3D Viewer</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #0a0f06;
+    color: #e8e0d4;
+    height: 100dvh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── Drop screen ─────────────────────────────── */
+  #drop-screen {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    background: #0a0f06;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .drop-eyebrow {
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: #5a6a3a;
+    margin-bottom: 24px;
+  }
+
+  .drop-title {
+    font-size: clamp(26px, 5vw, 46px);
+    font-weight: 300;
+    color: #e8e0d4;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+    text-align: center;
+    margin-bottom: 8px;
+  }
+  .drop-title strong { font-weight: 700; color: #a8c47a; }
+
+  .drop-sub {
+    font-size: 14px;
+    color: #5a6a3a;
+    margin-bottom: 48px;
+    text-align: center;
+  }
+
+  .drop-zone {
+    width: min(460px, 90vw);
+    border: 1.5px dashed #2a3a1a;
+    border-radius: 16px;
+    padding: 40px 28px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    position: relative;
+  }
+  .drop-zone:hover, .drop-zone.drag-over {
+    border-color: #a8c47a;
+    background: rgba(168,196,122,0.04);
+  }
+  .drop-zone input[type=file] {
+    position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+  }
+
+  .drop-icon {
+    width: 48px; height: 48px;
+    margin: 0 auto 18px;
+    background: #161f0a;
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .drop-icon svg { color: #a8c47a; }
+
+  .drop-zone p { font-size: 15px; color: #a8b890; margin-bottom: 5px; }
+  .drop-zone small { font-size: 12px; color: #3a4a22; }
+
+  .drop-formats {
+    display: flex; gap: 7px; justify-content: center; margin-top: 18px; flex-wrap: wrap;
+  }
+  .fmt-tag {
+    font-size: 11px; font-weight: 600; letter-spacing: 0.06em;
+    padding: 3px 8px; border-radius: 4px;
+    background: #161f0a; color: #5a7a34; border: 1px solid #283818;
+  }
+
+  .api-row {
+    margin-top: 28px;
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: center;
+  }
+  .api-row label { font-size: 12px; color: #3a4a22; }
+  .api-row input {
+    width: 250px;
+    background: #0e160a; border: 1px solid #283818;
+    border-radius: 8px; padding: 9px 14px;
+    font-size: 13px; color: #c0d0a0; outline: none;
+    transition: border-color 0.2s;
+  }
+  .api-row input:focus { border-color: #5a7a34; }
+  .api-row input::placeholder { color: #2a3818; }
+
+  /* ── Map screen ──────────────────────────────── */
+  #map-screen { display: none; flex: 1; flex-direction: column; height: 100dvh; }
+  #map-screen.active { display: flex; }
+
+  #topbar {
+    height: 46px;
+    background: rgba(10,15,6,0.94);
+    backdrop-filter: blur(14px);
+    border-bottom: 1px solid #1a2410;
+    display: flex; align-items: center;
+    padding: 0 12px; gap: 8px;
+    flex-shrink: 0; z-index: 10;
+  }
+
+  .brand { font-size: 13px; font-weight: 700; color: #a8c47a; letter-spacing: -0.01em; margin-right: 4px; }
+  .sep { width: 1px; height: 20px; background: #1a2410; }
+
+  .tb-btn {
+    height: 30px; padding: 0 11px;
+    border-radius: 6px; border: 1px solid #243018;
+    background: #0e160a; color: #7a8a60;
+    font-size: 12px; cursor: pointer;
+    display: flex; align-items: center; gap: 5px;
+    transition: all 0.15s; white-space: nowrap; flex-shrink: 0;
+  }
+  .tb-btn:hover { background: #182210; color: #c0d0a0; border-color: #3a5020; }
+  .tb-btn.active { background: #1c2e10; color: #a8c47a; border-color: #4a7020; }
+
+  .spacer { flex: 1; }
+  #feat-count { font-size: 11px; color: #2e3e1a; }
+
+  /* Camera controls */
+  #cam-controls {
+    position: absolute;
+    right: 12px; bottom: 80px;
+    display: flex; flex-direction: column; gap: 4px;
+    z-index: 5;
+  }
+  .cam-btn {
+    width: 36px; height: 36px;
+    background: rgba(10,15,6,0.90);
+    backdrop-filter: blur(10px);
+    border: 1px solid #1a2410;
+    border-radius: 8px;
+    color: #8a9a60; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; transition: all 0.15s;
+    user-select: none;
+  }
+  .cam-btn:hover { background: rgba(24,34,16,0.95); color: #c0d0a0; border-color: #3a5020; }
+  .cam-btn:active { transform: scale(0.93); }
+
+  /* Info panel */
+  #info-panel {
+    position: absolute; top: 12px; right: 12px;
+    width: 210px;
+    background: rgba(10,15,6,0.92);
+    backdrop-filter: blur(12px);
+    border: 1px solid #1a2410;
+    border-radius: 12px; padding: 13px;
+    display: none; z-index: 5;
+  }
+  #info-panel.visible { display: block; }
+  #info-close { float: right; cursor: pointer; color: #3a4a22; font-size: 17px; line-height: 1; }
+  #info-close:hover { color: #8a9a60; }
+  #info-name { font-size: 14px; font-weight: 600; color: #e8e0d4; margin-bottom: 3px; }
+  #info-cat { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #5a6a3a; margin-bottom: 8px; }
+  #info-notes { font-size: 12px; color: #7a8a60; line-height: 1.5; }
+
+  /* Legend */
+  #legend {
+    position: absolute; bottom: 70px; left: 12px;
+    background: rgba(10,15,6,0.90);
+    backdrop-filter: blur(10px);
+    border: 1px solid #1a2410;
+    border-radius: 10px; padding: 10px 13px;
+    display: none; z-index: 5; min-width: 150px;
+  }
+  #legend.visible { display: block; }
+  #legend h4 { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: #3a4a22; margin-bottom: 8px; }
+  .leg-row { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; font-size: 12px; color: #7a8a60; }
+  .leg-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+
+  /* Hint bar */
+  #hint {
+    position: absolute; bottom: 14px; left: 50%;
+    transform: translateX(-50%);
+    background: rgba(10,15,6,0.80);
+    backdrop-filter: blur(8px);
+    border: 1px solid #1a2410;
+    border-radius: 20px; padding: 6px 16px;
+    font-size: 11px; color: #3a4a22;
+    white-space: nowrap; z-index: 5;
+    pointer-events: none;
+  }
+
+  /* Map container */
+  #map { flex: 1; position: relative; }
+
+  /* Toast */
+  #toast {
+    position: fixed; bottom: 22px; left: 50%;
+    transform: translateX(-50%) translateY(70px);
+    background: #161f0a; border: 1px solid #3a5a1a;
+    border-radius: 8px; padding: 9px 16px;
+    font-size: 13px; color: #a8c47a; z-index: 200;
+    transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1);
+    pointer-events: none;
+  }
+  #toast.show { transform: translateX(-50%) translateY(0); }
+
+  /* Loading */
+  #loading {
+    position: fixed; inset: 0;
+    background: rgba(10,15,6,0.88);
+    z-index: 50; display: none;
+    align-items: center; justify-content: center;
+    flex-direction: column; gap: 14px;
+  }
+  #loading.active { display: flex; }
+  .spinner {
+    width: 34px; height: 34px;
+    border: 2px solid #1a2410; border-top-color: #a8c47a;
+    border-radius: 50%;
+    animation: spin 0.75s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #loading p { font-size: 13px; color: #5a6a3a; }
+</style>
+</head>
+<body>
+
+<!-- Drop screen -->
+<div id="drop-screen">
+  <p class="drop-eyebrow">Ranch 3D Viewer</p>
+  <h1 class="drop-title">Fly through<br><strong>your land.</strong></h1>
+  <p class="drop-sub">Photorealistic 3D terrain with your OnX data on top.</p>
+
+  <div class="drop-zone" id="drop-zone">
+    <input type="file" id="file-input" accept=".gpx,.kml,.kmz,.geojson,.json,.csv" multiple />
+    <div class="drop-icon">
+      <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        <polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+      </svg>
+    </div>
+    <p>Drop your OnX file here</p>
+    <small>or tap to browse</small>
+    <div class="drop-formats">
+      <span class="fmt-tag">GPX</span><span class="fmt-tag">KML</span>
+      <span class="fmt-tag">KMZ</span><span class="fmt-tag">GeoJSON</span>
+      <span class="fmt-tag">CSV</span>
+    </div>
+  </div>
+
+  <div class="api-row">
+    <label>Google Maps API Key</label>
+    <input type="password" id="api-key-input" placeholder="AIzaSy…" />
+  </div>
+</div>
+
+<!-- Map screen -->
+<div id="map-screen">
+  <div id="topbar">
+    <span class="brand">Ranch 3D</span>
+    <div class="sep"></div>
+    <button class="tb-btn" id="btn-import">
+      <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        <polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+      </svg>
+      Import
+    </button>
+    <button class="tb-btn" id="btn-fit">⌖ Fit to Ranch</button>
+    <button class="tb-btn" id="btn-legend">Legend</button>
+    <div class="spacer"></div>
+    <span id="feat-count"></span>
+  </div>
+
+  <div id="map">
+    <!-- Google 3D map renders here -->
+    <gmp-map-3d id="map3d"
+      style="width:100%;height:100%;display:block;"
+      heading="0"
+      tilt="67"
+      range="2000">
+    </gmp-map-3d>
+
+    <!-- Camera controls -->
+    <div id="cam-controls">
+      <button class="cam-btn" id="btn-tilt-up" title="Look up">⌃</button>
+      <button class="cam-btn" id="btn-tilt-dn" title="Look down">⌄</button>
+      <div style="height:4px"></div>
+      <button class="cam-btn" id="btn-rot-l" title="Rotate left">↺</button>
+      <button class="cam-btn" id="btn-rot-r" title="Rotate right">↻</button>
+      <div style="height:4px"></div>
+      <button class="cam-btn" id="btn-top" title="Top-down view">⊕</button>
+      <button class="cam-btn" id="btn-closer" title="Zoom in">+</button>
+      <button class="cam-btn" id="btn-farther" title="Zoom out">−</button>
+    </div>
+
+    <!-- Legend -->
+    <div id="legend">
+      <h4>Features</h4>
+      <div id="legend-items"></div>
+    </div>
+
+    <!-- Feature info -->
+    <div id="info-panel">
+      <span id="info-close">×</span>
+      <div id="info-name"></div>
+      <div id="info-cat"></div>
+      <div id="info-notes"></div>
+    </div>
+
+    <!-- Gesture hint -->
+    <div id="hint">Drag to fly · Pinch to zoom · Two-finger rotate</div>
+  </div>
+</div>
+
+<input type="file" id="reimport-input" accept=".gpx,.kml,.kmz,.geojson,.json,.csv" multiple style="display:none" />
+<div id="loading"><div class="spinner"></div><p id="load-msg">Loading…</p></div>
+<div id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script>
+// ── State ──────────────────────────────────────────────────────
+let map3d = null;
+let allFeatures = [];
+let markers3d = [];
+let polylines3d = [];
+let polygons3d = [];
+let legendOpen = false;
+let apiKey = localStorage.getItem('ranch_api_key') || '';
+
+const apiKeyInput = document.getElementById('api-key-input');
+if (apiKey) apiKeyInput.value = apiKey;
+
+// ── Category config ────────────────────────────────────────────
+const CATS = {
+  'property-boundary': { label: 'Property Boundary', color: '#FF6B35' },
+  'internal-fence':    { label: 'Fence',             color: '#C9A96E' },
+  'road':              { label: 'Road',               color: '#D4C090' },
+  'trail':             { label: 'Trail',              color: '#90C865' },
+  'water-source':      { label: 'Water',              color: '#5BA4E5' },
+  'hunting-stand':     { label: 'Stand',              color: '#C0784A' },
+  'feeder':            { label: 'Feeder',             color: '#F4A43A' },
+  'food-plot':         { label: 'Food Plot',          color: '#52C41A' },
+  'grazing-area':      { label: 'Grazing',            color: '#90C878' },
+  'gate':              { label: 'Gate',               color: '#A09060' },
+  'blind':             { label: 'Blind',              color: '#907860' },
+  'waypoint':          { label: 'Waypoint',           color: '#E06060' },
+  'custom':            { label: 'Custom',             color: '#8899AA' },
+};
+
+function guessCategory(name='', sym='', desc='') {
+  const s = (name+' '+sym+' '+desc).toLowerCase();
+  if (s.match(/boundary|property|perimeter/)) return 'property-boundary';
+  if (s.match(/fence|wire|barb/))             return 'internal-fence';
+  if (s.match(/road|drive|lane/))             return 'road';
+  if (s.match(/trail|path|walk/))             return 'trail';
+  if (s.match(/water|pond|tank|lake|stream|creek|spring|river/)) return 'water-source';
+  if (s.match(/stand|tower|treestand/))       return 'hunting-stand';
+  if (s.match(/feeder|corn|protein/))         return 'feeder';
+  if (s.match(/food.?plot|plot|clover|wheat/))return 'food-plot';
+  if (s.match(/graz|pasture/))               return 'grazing-area';
+  if (s.match(/gate|entrance/))               return 'gate';
+  if (s.match(/blind/))                       return 'blind';
+  return 'waypoint';
+}
+
+// ── Parsers ────────────────────────────────────────────────────
+function parseGPX(text) {
+  const doc = new DOMParser().parseFromString(text,'application/xml');
+  const out = [];
+  doc.querySelectorAll('wpt').forEach(w => {
+    const lat=+w.getAttribute('lat'), lng=+w.getAttribute('lon');
+    const name=w.querySelector('name')?.textContent||'Waypoint';
+    const sym=w.querySelector('sym')?.textContent||'';
+    const desc=w.querySelector('desc')?.textContent||'';
+    out.push({type:'point',name,cat:guessCategory(name,sym,desc),notes:desc,coords:[{lat,lng,alt:+(w.querySelector('ele')?.textContent||0)}]});
+  });
+  doc.querySelectorAll('trk').forEach(t => {
+    const name=t.querySelector('name')?.textContent||'Track';
+    const coords=[...t.querySelectorAll('trkpt')].map(p=>({lat:+p.getAttribute('lat'),lng:+p.getAttribute('lon'),alt:+(p.querySelector('ele')?.textContent||0)}));
+    if(coords.length>1) out.push({type:'line',name,cat:guessCategory(name),notes:'',coords});
+  });
+  doc.querySelectorAll('rte').forEach(r => {
+    const name=r.querySelector('name')?.textContent||'Route';
+    const coords=[...r.querySelectorAll('rtept')].map(p=>({lat:+p.getAttribute('lat'),lng:+p.getAttribute('lon'),alt:+(p.querySelector('ele')?.textContent||0)}));
+    if(coords.length>1) out.push({type:'line',name,cat:guessCategory(name),notes:'',coords});
+  });
+  return out;
+}
+
+function kmlCoords(text) {
+  return text.trim().split(/\s+/).map(c=>{
+    const[lng,lat,alt]=c.split(',').map(Number);
+    return{lat,lng,alt:alt||0};
+  }).filter(c=>!isNaN(c.lat)&&!isNaN(c.lng));
+}
+
+function parseKML(text) {
+  const doc=new DOMParser().parseFromString(text,'application/xml');
+  const out=[];
+  doc.querySelectorAll('Placemark').forEach(pm=>{
+    const name=pm.querySelector('name')?.textContent||'Feature';
+    const desc=pm.querySelector('description')?.textContent?.replace(/<[^>]+>/g,'')||'';
+    const styleUrl=pm.querySelector('styleUrl')?.textContent?.replace('#','')||'';
+    const cat=guessCategory(name,styleUrl,desc);
+    const ptEl=pm.querySelector('Point coordinates');
+    if(ptEl){const[lng,lat,alt]=ptEl.textContent.trim().split(',').map(Number);if(!isNaN(lat))out.push({type:'point',name,cat,notes:desc,coords:[{lat,lng,alt:alt||0}]});}
+    const lsEl=pm.querySelector('LineString coordinates');
+    if(lsEl){const coords=kmlCoords(lsEl.textContent);if(coords.length>1)out.push({type:'line',name,cat,notes:desc,coords});}
+    const polyEl=pm.querySelector('Polygon outerBoundaryIs LinearRing coordinates');
+    if(polyEl){const coords=kmlCoords(polyEl.textContent);if(coords.length>2)out.push({type:'polygon',name,cat,notes:desc,coords});}
+  });
+  return out;
+}
+
+function parseGeoJSON(text) {
+  let gj; try{gj=JSON.parse(text);}catch{return[];}
+  const out=[];
+  const items=gj.type==='FeatureCollection'?gj.features:[gj];
+  items.forEach(f=>{
+    if(!f?.geometry) return;
+    const p=f.properties||{};
+    const name=p.name||p.Name||p.title||'Feature';
+    const desc=p.description||p.notes||p.desc||'';
+    const cat=guessCategory(name,p.category||p.type||p.symbol||'',desc);
+    const{type,coordinates}=f.geometry;
+    if(type==='Point'){const[lng,lat,alt]=coordinates;out.push({type:'point',name,cat,notes:desc,coords:[{lat,lng,alt:alt||0}]});}
+    else if(type==='LineString'){out.push({type:'line',name,cat,notes:desc,coords:coordinates.map(([lng,lat,alt])=>({lat,lng,alt:alt||0}))});}
+    else if(type==='Polygon'){out.push({type:'polygon',name,cat,notes:desc,coords:coordinates[0].map(([lng,lat,alt])=>({lat,lng,alt:alt||0}))});}
+    else if(type==='MultiLineString'){coordinates.forEach((l,i)=>out.push({type:'line',name:`${name} ${i+1}`,cat,notes:desc,coords:l.map(([lng,lat,alt])=>({lat,lng,alt:alt||0}))}));}
+  });
+  return out;
+}
+
+function parseCSV(text) {
+  const lines=text.trim().split('\n'); if(lines.length<2) return[];
+  const headers=lines[0].split(',').map(h=>h.trim().toLowerCase().replace(/['"]/g,''));
+  const col=(...n)=>{for(const x of n){const i=headers.indexOf(x);if(i!==-1)return i;}return -1;};
+  const latI=col('lat','latitude','y'),lngI=col('lon','lng','longitude','x');
+  if(latI===-1||lngI===-1) return[];
+  const nameI=col('name','title'),catI=col('category','type','symbol'),notesI=col('notes','description','desc'),altI=col('ele','elevation','alt','altitude');
+  return lines.slice(1).filter(l=>l.trim()).map((line,i)=>{
+    const c=line.split(',').map(v=>v.trim().replace(/^["']|["']$/g,''));
+    const lat=+c[latI],lng=+c[lngI]; if(isNaN(lat)||isNaN(lng)) return null;
+    const name=nameI!==-1?c[nameI]:`Point ${i+1}`;
+    const alt=altI!==-1?+c[altI]||0:0;
+    return{type:'point',name,cat:guessCategory(name,catI!==-1?c[catI]:'',''),notes:notesI!==-1?c[notesI]:'',coords:[{lat,lng,alt}]};
+  }).filter(Boolean);
+}
+
+async function parseFile(file) {
+  const n=file.name.toLowerCase();
+  if(n.endsWith('.gpx'))    return parseGPX(await file.text());
+  if(n.endsWith('.kml'))    return parseKML(await file.text());
+  if(n.endsWith('.geojson')||n.endsWith('.json')) return parseGeoJSON(await file.text());
+  if(n.endsWith('.csv'))    return parseCSV(await file.text());
+  if(n.endsWith('.kmz')){
+    const zip=await JSZip.loadAsync(await file.arrayBuffer());
+    const kmlName=Object.keys(zip.files).find(f=>f.endsWith('.kml'));
+    if(kmlName) return parseKML(await zip.files[kmlName].async('string'));
+  }
+  return[];
+}
+
+// ── Render onto 3D map ─────────────────────────────────────────
+function clearOverlays() {
+  markers3d.forEach(m => m.remove());
+  polylines3d.forEach(p => p.remove());
+  polygons3d.forEach(p => p.remove());
+  markers3d = []; polylines3d = []; polygons3d = [];
+}
+
+function showInfo(f) {
+  const cfg = CATS[f.cat] || CATS['waypoint'];
+  document.getElementById('info-name').textContent = f.name;
+  document.getElementById('info-cat').textContent = cfg.label.toUpperCase();
+  document.getElementById('info-cat').style.color = cfg.color;
+  document.getElementById('info-notes').textContent = f.notes || '';
+  document.getElementById('info-panel').classList.add('visible');
+}
+
+function renderFeatures(features) {
+  clearOverlays();
+  if (!map3d) return;
+
+  features.forEach(f => {
+    const cfg = CATS[f.cat] || CATS['waypoint'];
+
+    if (f.type === 'point') {
+      const c = f.coords[0];
+      const marker = document.createElement('gmp-marker-3d');
+      marker.setAttribute('position', `${c.lat},${c.lng},${c.alt||0}`);
+      marker.setAttribute('altitude-mode', 'relative-to-ground');
+      marker.setAttribute('title', f.name);
+      // Color the marker via a colored label
+      const label = document.createElement('gmp-marker-3d');
+      label.position = { lat: c.lat, lng: c.lng, altitude: (c.alt||0) + 2 };
+      map3d.appendChild(marker);
+      marker.addEventListener('click', () => showInfo(f));
+      markers3d.push({ remove: () => marker.remove() });
+
+    } else if (f.type === 'line') {
+      const poly = document.createElement('gmp-polyline-3d');
+      poly.setAttribute('altitude-mode', 'clamp-to-ground');
+      poly.setAttribute('stroke-color', cfg.color + 'EE');
+      poly.setAttribute('stroke-width', f.cat === 'property-boundary' ? '4' : '3');
+      poly.coordinates = f.coords.map(c => ({ lat: c.lat, lng: c.lng, altitude: c.alt||0 }));
+      map3d.appendChild(poly);
+      poly.addEventListener('click', () => showInfo(f));
+      polylines3d.push({ remove: () => poly.remove() });
+
+    } else if (f.type === 'polygon') {
+      const poly = document.createElement('gmp-polygon-3d');
+      poly.setAttribute('altitude-mode', 'clamp-to-ground');
+      poly.setAttribute('stroke-color', cfg.color + 'EE');
+      poly.setAttribute('stroke-width', '3');
+      poly.setAttribute('fill-color', cfg.color + '44');
+      poly.outerCoordinates = f.coords.map(c => ({ lat: c.lat, lng: c.lng, altitude: c.alt||0 }));
+      map3d.appendChild(poly);
+      poly.addEventListener('click', () => showInfo(f));
+      polygons3d.push({ remove: () => poly.remove() });
+    }
+  });
+}
+
+// Compute center + range from all coords
+function getBounds(features) {
+  let minLat=90,maxLat=-90,minLng=180,maxLng=-180;
+  features.forEach(f => f.coords.forEach(c => {
+    minLat=Math.min(minLat,c.lat); maxLat=Math.max(maxLat,c.lat);
+    minLng=Math.min(minLng,c.lng); maxLng=Math.max(maxLng,c.lng);
+  }));
+  const lat=(minLat+maxLat)/2, lng=(minLng+maxLng)/2;
+  const dLat=maxLat-minLat, dLng=maxLng-minLng;
+  const rangeMeters = Math.max(dLat,dLng) * 111320 * 2.2;
+  return { lat, lng, range: Math.max(500, Math.min(rangeMeters, 80000)) };
+}
+
+function flyToBounds() {
+  if (!map3d || allFeatures.length === 0) return;
+  const { lat, lng, range } = getBounds(allFeatures);
+  map3d.setAttribute('center', `${lat},${lng}`);
+  map3d.setAttribute('range', String(range));
+  map3d.setAttribute('tilt', '67');
+  map3d.setAttribute('heading', '0');
+}
+
+// ── Build legend ───────────────────────────────────────────────
+function buildLegend(features) {
+  const used = {};
+  features.forEach(f => { used[f.cat] = (used[f.cat]||0)+1; });
+  const el = document.getElementById('legend-items');
+  el.innerHTML = '';
+  Object.entries(used).forEach(([cat, count]) => {
+    const cfg = CATS[cat] || CATS['waypoint'];
+    el.innerHTML += `<div class="leg-row">
+      <div class="leg-dot" style="background:${cfg.color}"></div>
+      <span>${cfg.label} <span style="color:#2e3e1a">(${count})</span></span>
+    </div>`;
+  });
+  document.getElementById('feat-count').textContent = `${features.length} features`;
+}
+
+// ── Handle files ───────────────────────────────────────────────
+async function handleFiles(files) {
+  setLoading(true, 'Parsing files…');
+  let parsed = [];
+  for (const file of files) {
+    try { parsed = parsed.concat(await parseFile(file)); }
+    catch(e) { console.error(e); }
+  }
+  if (parsed.length === 0) { setLoading(false); toast('No features found'); return; }
+  allFeatures = allFeatures.concat(parsed);
+
+  if (!map3d) {
+    setLoading(true, 'Loading 3D terrain…');
+    showMapScreen();
+    await waitForMap();
+  }
+
+  renderFeatures(allFeatures);
+  buildLegend(allFeatures);
+  setTimeout(flyToBounds, 800);
+  setLoading(false);
+  toast(`Loaded ${parsed.length} feature${parsed.length!==1?'s':''}`);
+}
+
+// ── Google Maps 3D loader ──────────────────────────────────────
+let mapReadyResolve = null;
+
+function showMapScreen() {
+  document.getElementById('drop-screen').style.display = 'none';
+  document.getElementById('map-screen').classList.add('active');
+  loadGoogleMaps3D();
+}
+
+function loadGoogleMaps3D() {
+  const s = document.createElement('script');
+  s.type = 'module';
+  s.textContent = `
+    (async () => {
+      const { Map3DElement, Marker3DElement, Polyline3DElement, Polygon3DElement } =
+        await google.maps.importLibrary("maps3d");
+
+      const mapEl = document.getElementById('map3d');
+
+      // Re-create as proper element
+      customElements.whenDefined('gmp-map-3d').then(() => {
+        window._map3dReady = true;
+        window.dispatchEvent(new Event('map3d-ready'));
+      });
+    })();
+  `;
+
+  // Load the Google Maps bootstrap first
+  const bootstrap = document.createElement('script');
+  bootstrap.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&v=beta&libraries=maps3d`;
+  bootstrap.async = true;
+  bootstrap.onload = () => {
+    document.head.appendChild(s);
+  };
+  bootstrap.onerror = () => {
+    setLoading(false);
+    toast('API key error — check your key and try again');
+  };
+  document.head.appendChild(bootstrap);
+}
+
+function waitForMap() {
+  return new Promise(resolve => {
+    if (window._map3dReady) { setupMap(); resolve(); return; }
+    window.addEventListener('map3d-ready', () => { setupMap(); resolve(); }, { once: true });
+    // Fallback timeout
+    setTimeout(() => { setupMap(); resolve(); }, 4000);
+  });
+}
+
+function setupMap() {
+  map3d = document.getElementById('map3d');
+  // Set initial view — will be overridden by flyToBounds
+  if (allFeatures.length > 0) {
+    const { lat, lng } = getBounds(allFeatures);
+    map3d.setAttribute('center', `${lat},${lng}`);
+  }
+  setupCameraControls();
+}
+
+// ── Camera controls ────────────────────────────────────────────
+function setupCameraControls() {
+  const m = map3d;
+  if (!m) return;
+
+  const step = (attr, delta, min, max) => {
+    const v = parseFloat(m.getAttribute(attr) || '0');
+    m.setAttribute(attr, String(Math.max(min, Math.min(max, v + delta))));
+  };
+
+  document.getElementById('btn-tilt-up').onclick = () => step('tilt', -8, 0, 90);
+  document.getElementById('btn-tilt-dn').onclick = () => step('tilt',  8, 0, 90);
+  document.getElementById('btn-rot-l').onclick   = () => step('heading', -15, -360, 360);
+  document.getElementById('btn-rot-r').onclick   = () => step('heading',  15, -360, 360);
+  document.getElementById('btn-closer').onclick  = () => step('range', -parseFloat(m.getAttribute('range')||'2000')*0.3, 50, 500000);
+  document.getElementById('btn-farther').onclick = () => step('range',  parseFloat(m.getAttribute('range')||'2000')*0.4, 50, 500000);
+  document.getElementById('btn-top').onclick = () => {
+    m.setAttribute('tilt', '0');
+    m.setAttribute('heading', '0');
+  };
+}
+
+// ── UI ─────────────────────────────────────────────────────────
+function setLoading(on, msg='') {
+  document.getElementById('loading').classList.toggle('active', on);
+  if (msg) document.getElementById('load-msg').textContent = msg;
+}
+
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+// Drop zone
+const dropZone = document.getElementById('drop-zone');
+const fileInput = document.getElementById('file-input');
+
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault(); dropZone.classList.remove('drag-over');
+  apiKey = apiKeyInput.value.trim();
+  if (apiKey) localStorage.setItem('ranch_api_key', apiKey);
+  handleFiles([...e.dataTransfer.files]);
+});
+fileInput.addEventListener('change', () => {
+  apiKey = apiKeyInput.value.trim();
+  if (apiKey) localStorage.setItem('ranch_api_key', apiKey);
+  handleFiles([...fileInput.files]);
+});
+
+// Toolbar
+document.getElementById('btn-import').onclick = () => document.getElementById('reimport-input').click();
+document.getElementById('reimport-input').onchange = e => { handleFiles([...e.target.files]); e.target.value=''; };
+document.getElementById('btn-fit').onclick = flyToBounds;
+document.getElementById('btn-legend').onclick = () => {
+  legendOpen = !legendOpen;
+  document.getElementById('legend').classList.toggle('visible', legendOpen);
+  document.getElementById('btn-legend').classList.toggle('active', legendOpen);
+};
+document.getElementById('info-close').onclick = () => document.getElementById('info-panel').classList.remove('visible');
+
+// Hide hint after 6s
+setTimeout(() => { const h = document.getElementById('hint'); if(h) h.style.opacity='0'; h.style.transition='opacity 1s'; }, 6000);
+</script>
+</body>
+</html>
