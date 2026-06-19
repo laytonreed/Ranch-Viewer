@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Ranch 3D Viewer</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f0; height: 100dvh; overflow: hidden; display: flex; flex-direction: column; }
+
+  #drop-screen { position: fixed; inset: 0; z-index: 100; background: #f5f5f0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .eyebrow { font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: #8a9a6a; margin-bottom: 20px; }
+  .title { font-size: clamp(28px, 5vw, 52px); font-weight: 300; color: #2a2a1a; letter-spacing: -0.02em; line-height: 1.1; text-align: center; margin-bottom: 8px; }
+  .title strong { font-weight: 700; color: #4a7a1a; }
+  .sub { font-size: 14px; color: #8a9a6a; margin-bottom: 48px; text-align: center; }
+  .options { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; }
+  .opt-card { width: 200px; border: 1.5px solid #d8d8c8; border-radius: 16px; padding: 28px 20px; text-align: center; cursor: pointer; transition: border-color 0.2s, box-shadow 0.2s; background: #fff; position: relative; }
+  .opt-card:hover { border-color: #4a7a1a; box-shadow: 0 4px 20px rgba(74,122,26,0.12); }
+  .opt-card input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+  .opt-icon { width: 48px; height: 48px; margin: 0 auto 14px; border-radius: 12px; display: flex; align-items: center; justify-content: center; }
+  .opt-card h3 { font-size: 14px; font-weight: 600; color: #2a2a1a; margin-bottom: 5px; }
+  .opt-card p { font-size: 12px; color: #8a9a6a; line-height: 1.4; }
+  .fmts { display: flex; gap: 5px; justify-content: center; margin-top: 12px; flex-wrap: wrap; }
+  .fmt { font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 4px; background: #f0f4e8; color: #5a7a2a; border: 1px solid #c8d8a8; }
+
+  #map-screen { display: none; flex: 1; flex-direction: column; height: 100dvh; }
+  #map-screen.active { display: flex; }
+
+  #topbar { height: 48px; background: #fff; border-bottom: 1px solid #e0e0d0; display: flex; align-items: center; padding: 0 14px; gap: 8px; flex-shrink: 0; z-index: 10; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+  .brand { font-size: 14px; font-weight: 700; color: #4a7a1a; margin-right: 4px; }
+  .sep { width: 1px; height: 20px; background: #e0e0d0; }
+  .tb { height: 30px; padding: 0 12px; border-radius: 6px; border: 1px solid #d8d8c8; background: #f8f8f4; color: #5a6a4a; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 5px; transition: all 0.15s; white-space: nowrap; }
+  .tb:hover { background: #f0f4e8; color: #2a4a0a; border-color: #b0c890; }
+  .tb.on { background: #eaf2d8; color: #3a6a0a; border-color: #8ab848; font-weight: 600; }
+  .spacer { flex: 1; }
+  #fcount { font-size: 11px; color: #a0aa80; }
+
+  #map { flex: 1; position: relative; background: #1a1a2a; }
+
+  /* The 3D map element fills the container */
+  #map3d-container { width: 100%; height: 100%; }
+
+  #cam { position: absolute; right: 12px; bottom: 100px; display: flex; flex-direction: column; gap: 3px; z-index: 5; }
+  .cb { width: 36px; height: 36px; background: rgba(255,255,255,0.96); border: 1px solid #d8d8c8; border-radius: 8px; color: #5a6a4a; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 16px; transition: all 0.15s; box-shadow: 0 1px 4px rgba(0,0,0,0.1); user-select: none; }
+  .cb:hover { background: #f0f4e8; color: #2a4a0a; border-color: #b0c890; }
+  .cb:active { transform: scale(0.91); }
+  .gap { height: 5px; }
+
+  #legend { position: absolute; bottom: 80px; left: 12px; background: rgba(255,255,255,0.97); border: 1px solid #d8d8c8; border-radius: 10px; padding: 10px 14px; display: none; z-index: 5; min-width: 150px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
+  #legend.show { display: block; }
+  #legend h4 { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: #a0aa80; margin-bottom: 8px; }
+  .lr { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; font-size: 12px; color: #5a6a4a; }
+  .ld { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+
+  #info { position: absolute; top: 12px; right: 12px; width: 210px; background: rgba(255,255,255,0.97); border: 1px solid #d8d8c8; border-radius: 12px; padding: 14px; display: none; z-index: 5; box-shadow: 0 2px 16px rgba(0,0,0,0.1); }
+  #info.show { display: block; }
+  #ic { float: right; cursor: pointer; color: #b0b890; font-size: 18px; line-height: 1; }
+  #iname { font-size: 14px; font-weight: 600; color: #2a2a1a; margin-bottom: 3px; }
+  #icat { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 8px; }
+  #inotes { font-size: 12px; color: #7a8a6a; line-height: 1.5; }
+
+  #hint { position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%); background: rgba(255,255,255,0.93); border: 1px solid #d8d8c8; border-radius: 20px; padding: 6px 16px; font-size: 11px; color: #a0aa80; white-space: nowrap; z-index: 5; pointer-events: none; transition: opacity 1s; box-shadow: 0 1px 6px rgba(0,0,0,0.06); }
+
+  /* Loading screen */
+  #loading { position: fixed; inset: 0; background: rgba(245,245,240,0.95); z-index: 50; display: none; align-items: center; justify-content: center; flex-direction: column; gap: 16px; }
+  #loading.on { display: flex; }
+  .spin { width: 36px; height: 36px; border: 2.5px solid #d8d8c8; border-top-color: #4a7a1a; border-radius: 50%; animation: sp 0.8s linear infinite; }
+  @keyframes sp { to { transform: rotate(360deg); } }
+  #lmsg { font-size: 14px; color: #6a7a4a; font-weight: 500; }
+  #lsub { font-size: 12px; color: #a0aa80; margin-top: -8px; }
+
+  #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(60px); background: #fff; border: 1px solid #b0c890; border-radius: 8px; padding: 9px 16px; font-size: 13px; color: #3a6a0a; z-index: 200; transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1); pointer-events: none; box-shadow: 0 2px 12px rgba(0,0,0,0.1); }
+  #toast.show { transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<div id="drop-screen">
+  <p class="eyebrow">Ranch 3D Viewer</p>
+  <h1 class="title">Your land,<br><strong>in three dimensions.</strong></h1>
+  <p class="sub">Photorealistic 3D terrain — fly through your canyons.</p>
+  <div class="options">
+    <div class="opt-card" onclick="startMap(null)">
+      <div class="opt-icon" style="background:#eaf2d8">
+        <svg width="24" height="24" fill="none" stroke="#4a7a1a" stroke-width="1.8" viewBox="0 0 24 24"><path d="M3 11l19-9-9 19-2-8-8-2z"/></svg>
+      </div>
+      <h3>Open 3D Map</h3>
+      <p>Fly through terrain with no data loaded</p>
+    </div>
+    <div class="opt-card">
+      <input type="file" id="fi" accept=".gpx,.kml,.kmz,.geojson,.json,.csv" multiple />
+      <div class="opt-icon" style="background:#f0f4e8">
+        <svg width="24" height="24" fill="none" stroke="#4a7a1a" stroke-width="1.8" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      </div>
+      <h3>Import OnX File</h3>
+      <p>Load your ranch data onto the 3D map</p>
+      <div class="fmts"><span class="fmt">GPX</span><span class="fmt">KML</span><span class="fmt">KMZ</span><span class="fmt">GeoJSON</span><span class="fmt">CSV</span></div>
+    </div>
+  </div>
+</div>
+
+<div id="map-screen">
+  <div id="topbar">
+    <span class="brand">Ranch 3D</span>
+    <div class="sep"></div>
+    <button class="tb" id="bimport">↑ Import</button>
+    <button class="tb" id="bfit">⌖ Fit to Ranch</button>
+    <button class="tb" id="bleg">Legend</button>
+    <div class="spacer"></div>
+    <span id="fcount"></span>
+  </div>
+  <div id="map">
+    <div id="map3d-container"></div>
+    <div id="cam">
+      <button class="cb" id="cup">⌃</button>
+      <button class="cb" id="cdn">⌄</button>
+      <div class="gap"></div>
+      <button class="cb" id="crl">↺</button>
+      <button class="cb" id="crr">↻</button>
+      <div class="gap"></div>
+      <button class="cb" id="czin">+</button>
+      <button class="cb" id="czout">−</button>
+      <div class="gap"></div>
+      <button class="cb" id="ctop">⊕</button>
+    </div>
+    <div id="legend"><h4>Features</h4><div id="li"></div></div>
+    <div id="info"><span id="ic">×</span><div id="iname"></div><div id="icat"></div><div id="inotes"></div></div>
+    <div id="hint">Drag to fly · Pinch to zoom · Two fingers to rotate & tilt</div>
+  </div>
+</div>
+
+<input type="file" id="rfi" accept=".gpx,.kml,.kmz,.geojson,.json,.csv" multiple style="display:none" />
+<div id="loading"><div class="spin"></div><p id="lmsg">Loading photorealistic 3D…</p><p id="lsub">This may take 20–30 seconds</p></div>
+<div id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script>
+const API_KEY = "AIzaSyAOmx976Lx1Veyhx4O4aRDQjPnn4-dPdu0";
+const MAP_ID  = "3602e54dd6b36a1f7cf27c411";
+
+let map3d = null, allF = [], legOpen = false, mapLoaded = false, pendingFiles = null;
+
+const CATS = {
+  'property-boundary': { label: 'Property Boundary', color: '#FF6B35' },
+  'internal-fence':    { label: 'Fence',             color: '#C9A96E' },
+  'road':              { label: 'Road',               color: '#A07840' },
+  'trail':             { label: 'Trail',              color: '#5a9a30' },
+  'water-source':      { label: 'Water',              color: '#3a8adf' },
+  'hunting-stand':     { label: 'Stand',              color: '#A06030' },
+  'feeder':            { label: 'Feeder',             color: '#D4901a' },
+  'food-plot':         { label: 'Food Plot',          color: '#3aaa10' },
+  'grazing-area':      { label: 'Grazing',            color: '#70aa50' },
+  'gate':              { label: 'Gate',               color: '#807050' },
+  'blind':             { label: 'Blind',              color: '#706050' },
+  'waypoint':          { label: 'Waypoint',           color: '#D04040' },
+  'custom':            { label: 'Custom',             color: '#6080A0' },
+};
+
+function guess(n='',s='',d='') {
+  const t=(n+' '+s+' '+d).toLowerCase();
+  if(t.match(/boundary|property|perimeter/)) return 'property-boundary';
+  if(t.match(/fence|wire|barb/))             return 'internal-fence';
+  if(t.match(/road|drive|lane/))             return 'road';
+  if(t.match(/trail|path|walk/))             return 'trail';
+  if(t.match(/water|pond|tank|lake|stream|creek|spring|river/)) return 'water-source';
+  if(t.match(/stand|tower|treestand/))       return 'hunting-stand';
+  if(t.match(/feeder|corn|protein/))         return 'feeder';
+  if(t.match(/food.?plot|plot|clover|wheat/))return 'food-plot';
+  if(t.match(/graz|pasture/))               return 'grazing-area';
+  if(t.match(/gate|entrance/))               return 'gate';
+  if(t.match(/blind/))                       return 'blind';
+  return 'waypoint';
+}
+
+// ── Parsers ────────────────────────────────────────────────────
+function parseGPX(txt) {
+  const doc=new DOMParser().parseFromString(txt,'application/xml'),out=[];
+  doc.querySelectorAll('wpt').forEach(w=>{
+    const lat=+w.getAttribute('lat'),lng=+w.getAttribute('lon');
+    const name=w.querySelector('name')?.textContent||'Waypoint';
+    const sym=w.querySelector('sym')?.textContent||'';
+    const desc=w.querySelector('desc')?.textContent||'';
+    const alt=+(w.querySelector('ele')?.textContent||0);
+    out.push({t:'pt',name,cat:guess(name,sym,desc),notes:desc,coords:[{lat,lng,alt}]});
+  });
+  doc.querySelectorAll('trk').forEach(tk=>{
+    const name=tk.querySelector('name')?.textContent||'Track';
+    const coords=[...tk.querySelectorAll('trkpt')].map(p=>({lat:+p.getAttribute('lat'),lng:+p.getAttribute('lon'),alt:+(p.querySelector('ele')?.textContent||0)}));
+    if(coords.length>1)out.push({t:'ln',name,cat:guess(name),notes:'',coords});
+  });
+  doc.querySelectorAll('rte').forEach(r=>{
+    const name=r.querySelector('name')?.textContent||'Route';
+    const coords=[...r.querySelectorAll('rtept')].map(p=>({lat:+p.getAttribute('lat'),lng:+p.getAttribute('lon'),alt:+(p.querySelector('ele')?.textContent||0)}));
+    if(coords.length>1)out.push({t:'ln',name,cat:guess(name),notes:'',coords});
+  });
+  return out;
+}
+
+function kc(txt){return txt.trim().split(/\s+/).map(c=>{const[lng,lat,alt]=c.split(',').map(Number);return{lat,lng,alt:alt||0};}).filter(c=>!isNaN(c.lat));}
+
+function parseKML(txt) {
+  const doc=new DOMParser().parseFromString(txt,'application/xml'),out=[];
+  doc.querySelectorAll('Placemark').forEach(pm=>{
+    const name=pm.querySelector('name')?.textContent||'Feature';
+    const desc=pm.querySelector('description')?.textContent?.replace(/<[^>]+>/g,'')||'';
+    const su=pm.querySelector('styleUrl')?.textContent?.replace('#','')||'';
+    const cat=guess(name,su,desc);
+    const pe=pm.querySelector('Point coordinates');
+    if(pe){const[lng,lat,alt]=pe.textContent.trim().split(',').map(Number);if(!isNaN(lat))out.push({t:'pt',name,cat,notes:desc,coords:[{lat,lng,alt:alt||0}]});}
+    const le=pm.querySelector('LineString coordinates');
+    if(le){const c=kc(le.textContent);if(c.length>1)out.push({t:'ln',name,cat,notes:desc,coords:c});}
+    const poe=pm.querySelector('Polygon outerBoundaryIs LinearRing coordinates');
+    if(poe){const c=kc(poe.textContent);if(c.length>2)out.push({t:'pg',name,cat,notes:desc,coords:c});}
+  });
+  return out;
+}
+
+function parseGJ(txt) {
+  let gj;try{gj=JSON.parse(txt);}catch{return[];}
+  const out=[],items=gj.type==='FeatureCollection'?gj.features:[gj];
+  items.forEach(f=>{
+    if(!f?.geometry)return;
+    const p=f.properties||{};
+    const name=p.name||p.Name||p.title||'Feature';
+    const desc=p.description||p.notes||p.desc||'';
+    const cat=guess(name,p.category||p.type||p.symbol||'',desc);
+    const{type:gt,coordinates:gc}=f.geometry;
+    if(gt==='Point'){const[lng,lat,alt]=gc;out.push({t:'pt',name,cat,notes:desc,coords:[{lat,lng,alt:alt||0}]});}
+    else if(gt==='LineString'){out.push({t:'ln',name,cat,notes:desc,coords:gc.map(([lng,lat,alt])=>({lat,lng,alt:alt||0}))});}
+    else if(gt==='Polygon'){out.push({t:'pg',name,cat,notes:desc,coords:gc[0].map(([lng,lat,alt])=>({lat,lng,alt:alt||0}))});}
+    else if(gt==='MultiLineString'){gc.forEach((l,i)=>out.push({t:'ln',name:`${name} ${i+1}`,cat,notes:desc,coords:l.map(([lng,lat,alt])=>({lat,lng,alt:alt||0}))}));}
+  });
+  return out;
+}
+
+function parseCSV(txt) {
+  const lines=txt.trim().split('\n');if(lines.length<2)return[];
+  const h=lines[0].split(',').map(x=>x.trim().toLowerCase().replace(/['"]/g,''));
+  const col=(...n)=>{for(const x of n){const i=h.indexOf(x);if(i!==-1)return i;}return -1;};
+  const li=col('lat','latitude','y'),lni=col('lon','lng','longitude','x');
+  if(li===-1||lni===-1)return[];
+  const ni=col('name','title'),ci=col('category','type'),nti=col('notes','description','desc'),ai=col('ele','elevation','alt','altitude');
+  return lines.slice(1).filter(l=>l.trim()).map((line,i)=>{
+    const c=line.split(',').map(v=>v.trim().replace(/^["']|["']$/g,''));
+    const lat=+c[li],lng=+c[lni];if(isNaN(lat)||isNaN(lng))return null;
+    const alt=ai!==-1?+c[ai]||0:0;
+    return{t:'pt',name:ni!==-1?c[ni]:`Point ${i+1}`,cat:guess(ni!==-1?c[ni]:'',ci!==-1?c[ci]:'',''),notes:nti!==-1?c[nti]:'',coords:[{lat,lng,alt}]};
+  }).filter(Boolean);
+}
+
+async function parseFile(file) {
+  const n=file.name.toLowerCase();
+  if(n.endsWith('.gpx'))return parseGPX(await file.text());
+  if(n.endsWith('.kml'))return parseKML(await file.text());
+  if(n.endsWith('.geojson')||n.endsWith('.json'))return parseGJ(await file.text());
+  if(n.endsWith('.csv'))return parseCSV(await file.text());
+  if(n.endsWith('.kmz')){
+    const zip=await JSZip.loadAsync(await file.arrayBuffer());
+    const kn=Object.keys(zip.files).find(f=>f.endsWith('.kml'));
+    if(kn)return parseKML(await zip.files[kn].async('string'));
+  }
+  return[];
+}
+
+// ── Render on 3D map ───────────────────────────────────────────
+function renderFeatures(features) {
+  if(!map3d) return;
+  // Remove existing overlays
+  map3d.querySelectorAll('gmp-polyline-3d,gmp-polygon-3d,gmp-marker-3d').forEach(el=>el.remove());
+
+  features.forEach(f=>{
+    const cfg=CATS[f.cat]||CATS.waypoint;
+
+    if(f.t==='pt'){
+      const m=document.createElement('gmp-marker-3d');
+      m.setAttribute('position',`${f.coords[0].lat},${f.coords[0].lng},${f.coords[0].alt||0}`);
+      m.setAttribute('altitude-mode','relative-to-ground');
+      m.setAttribute('title',f.name);
+      m.setAttribute('extruded','true');
+      m.addEventListener('click',()=>showInfo(f));
+      map3d.appendChild(m);
+
+    } else if(f.t==='ln'){
+      const p=document.createElement('gmp-polyline-3d');
+      p.setAttribute('altitude-mode','clamp-to-ground');
+      p.setAttribute('stroke-color', cfg.color+'EE');
+      p.setAttribute('stroke-width', f.cat==='property-boundary'?'5':'3');
+      p.setAttribute('stroke-opacity','1');
+      customElements.whenDefined('gmp-polyline-3d').then(()=>{
+        p.coordinates=f.coords.map(c=>({lat:c.lat,lng:c.lng,altitude:c.alt||0}));
+      });
+      p.addEventListener('click',()=>showInfo(f));
+      map3d.appendChild(p);
+
+    } else if(f.t==='pg'){
+      const pg=document.createElement('gmp-polygon-3d');
+      pg.setAttribute('altitude-mode','clamp-to-ground');
+      pg.setAttribute('stroke-color',cfg.color+'EE');
+      pg.setAttribute('stroke-width','4');
+      pg.setAttribute('fill-color',cfg.color+'55');
+      customElements.whenDefined('gmp-polygon-3d').then(()=>{
+        pg.outerCoordinates=f.coords.map(c=>({lat:c.lat,lng:c.lng,altitude:c.alt||0}));
+      });
+      pg.addEventListener('click',()=>showInfo(f));
+      map3d.appendChild(pg);
+    }
+  });
+}
+
+function getBounds(features){
+  let minLat=90,maxLat=-90,minLng=180,maxLng=-180;
+  features.forEach(f=>f.coords.forEach(c=>{minLat=Math.min(minLat,c.lat);maxLat=Math.max(maxLat,c.lat);minLng=Math.min(minLng,c.lng);maxLng=Math.max(maxLng,c.lng);}));
+  const lat=(minLat+maxLat)/2,lng=(minLng+maxLng)/2;
+  const span=Math.max(maxLat-minLat,maxLng-minLng);
+  const range=Math.max(400,Math.min(span*111320*2.5,80000));
+  return{lat,lng,range};
+}
+
+function fitBounds(){
+  if(!map3d||!allF.length)return;
+  const{lat,lng,range}=getBounds(allF);
+  map3d.center={lat,lng,altitude:0};
+  map3d.range=range;
+  map3d.tilt=67;
+}
+
+function showInfo(f){
+  const cfg=CATS[f.cat]||CATS.waypoint;
+  document.getElementById('iname').textContent=f.name;
+  const el=document.getElementById('icat');el.textContent=cfg.label.toUpperCase();el.style.color=cfg.color;
+  document.getElementById('inotes').textContent=f.notes||'';
+  document.getElementById('info').classList.add('show');
+}
+
+function buildLegend(features){
+  const used={};features.forEach(f=>{used[f.cat]=(used[f.cat]||0)+1;});
+  const el=document.getElementById('li');el.innerHTML='';
+  Object.entries(used).forEach(([cat,count])=>{
+    const cfg=CATS[cat]||CATS.waypoint;
+    el.innerHTML+=`<div class="lr"><div class="ld" style="background:${cfg.color}"></div><span>${cfg.label} <span style="color:#b0ba90">(${count})</span></span></div>`;
+  });
+  document.getElementById('fcount').textContent=`${features.length} features`;
+}
+
+// ── Map init ───────────────────────────────────────────────────
+async function startMap(files) {
+  document.getElementById('drop-screen').style.display='none';
+  document.getElementById('map-screen').classList.add('active');
+  load(true,'Loading photorealistic 3D…');
+
+  if(files) pendingFiles=files;
+
+  // Load Google Maps with beta + maps3d library
+  const script=document.createElement('script');
+  script.src=`https://maps.googleapis.com/maps/api/js?key=${API_KEY}&v=beta&libraries=maps3d&callback=onGoogleMapsLoaded`;
+  script.async=true;
+  script.onerror=()=>{load(false);toast('Failed to load Google Maps');};
+  document.head.appendChild(script);
+}
+
+window.onGoogleMapsLoaded=async function(){
+  try {
+    // Import the 3D map library
+    await google.maps.importLibrary('maps3d');
+
+    // Create the 3D map element
+    const container=document.getElementById('map3d-container');
+    map3d=document.createElement('gmp-map-3d');
+    map3d.style.width='100%';
+    map3d.style.height='100%';
+    map3d.style.display='block';
+    map3d.setAttribute('center','30.5,-98.5,500');
+    map3d.setAttribute('tilt','67');
+    map3d.setAttribute('range','15000');
+    map3d.setAttribute('heading','0');
+    container.appendChild(map3d);
+
+    // Wait for element to be ready
+    await customElements.whenDefined('gmp-map-3d');
+
+    // Small delay to let it initialize
+    await new Promise(r=>setTimeout(r,1000));
+
+    mapLoaded=true;
+    setupCam();
+
+    if(pendingFiles){
+      load(true,'Loading your ranch data…');
+      let parsed=[];
+      for(const f of pendingFiles){
+        try{parsed=parsed.concat(await parseFile(f));}catch(e){console.error(e);}
+      }
+      if(parsed.length){
+        allF=allF.concat(parsed);
+        renderFeatures(allF);
+        buildLegend(allF);
+        setTimeout(fitBounds,500);
+        toast(`Loaded ${parsed.length} feature${parsed.length!==1?'s':''}`);
+      } else {
+        toast('No features found in file');
+      }
+      pendingFiles=null;
+    }
+
+    load(false);
+
+  } catch(e) {
+    console.error(e);
+    load(false);
+    toast('3D map failed to initialize — try refreshing');
+  }
+};
+
+function setupCam(){
+  document.getElementById('cup').onclick=()=>{map3d.tilt=Math.max(0,(map3d.tilt||67)-10);};
+  document.getElementById('cdn').onclick=()=>{map3d.tilt=Math.min(90,(map3d.tilt||67)+10);};
+  document.getElementById('crl').onclick=()=>{map3d.heading=(map3d.heading||0)-20;};
+  document.getElementById('crr').onclick=()=>{map3d.heading=(map3d.heading||0)+20;};
+  document.getElementById('czin').onclick=()=>{map3d.range=Math.max(100,(map3d.range||5000)*0.6);};
+  document.getElementById('czout').onclick=()=>{map3d.range=Math.min(500000,(map3d.range||5000)*1.6);};
+  document.getElementById('ctop').onclick=()=>{map3d.tilt=0;map3d.heading=0;};
+}
+
+async function handleFiles(files){
+  if(!mapLoaded){startMap(files);return;}
+  load(true,'Loading your ranch data…');
+  let parsed=[];
+  for(const f of files){try{parsed=parsed.concat(await parseFile(f));}catch(e){console.error(e);}}
+  if(!parsed.length){load(false);toast('No features found');return;}
+  allF=allF.concat(parsed);
+  renderFeatures(allF);
+  buildLegend(allF);
+  setTimeout(fitBounds,500);
+  load(false);
+  toast(`Loaded ${parsed.length} feature${parsed.length!==1?'s':''}`);
+}
+
+function load(on,msg=''){
+  document.getElementById('loading').classList.toggle('on',on);
+  if(msg)document.getElementById('lmsg').textContent=msg;
+}
+function toast(msg){const el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');setTimeout(()=>el.classList.remove('show'),3500);}
+
+document.getElementById('fi').addEventListener('change',e=>handleFiles([...e.target.files]));
+document.getElementById('bimport').onclick=()=>document.getElementById('rfi').click();
+document.getElementById('rfi').onchange=e=>{handleFiles([...e.target.files]);e.target.value='';};
+document.getElementById('bfit').onclick=fitBounds;
+document.getElementById('bleg').onclick=()=>{legOpen=!legOpen;document.getElementById('legend').classList.toggle('show',legOpen);document.getElementById('bleg').classList.toggle('on',legOpen);};
+document.getElementById('ic').onclick=()=>document.getElementById('info').classList.remove('show');
+setTimeout(()=>{const h=document.getElementById('hint');if(h)h.style.opacity='0';},7000);
+</script>
+</body>
+</html>
